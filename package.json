@@ -1,0 +1,24 @@
+{
+  "name": "pc-ir-relay",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "clean": "rimraf dist",
+    "prestart": "npm run clean && npm run build",
+    "start": "func start",
+    "test": "echo \"No tests yet...\""
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0",
+    "@sendgrid/mail": "^8.1.6",
+    "twilio": "^5.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.19",
+    "rimraf": "^5.0.0",
+    "typescript": "^4.0.0"
+  },
+  "main": "dist/src/{index.js,functions/*.js}"
+}

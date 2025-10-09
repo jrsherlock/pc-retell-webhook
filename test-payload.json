@@ -1,0 +1,22 @@
+{
+  "call_id": "584f904a8cda77eb733224",
+  "agent_id": "agent_dc74e30b4",
+  "start_timestamp": 1760013120,
+  "end_timestamp": 1760013256,
+  "transcript": "agent: Thank you for calling ProCircular Incident Response hotline. This is your AI assistant. I'm here to help you report a cybersecurity incident. Can you please tell me your name? user: Yes, my name is Jim Sherlock. agent: Thank you, Jim. And what company are you calling from? user: Cyberpave. agent: Thank you. Can you please describe the incident you're experiencing? user: All of my machines are locked up with malware. It says I need to pay Bitcoin. Everything is locked up internally and external system, including our payroll system. agent: I understand. That sounds like a ransomware attack. Do you have Cyber Liability Insurance? user: Yes, we do. agent: Great. Can you tell me the name of your insurance provider? user: Cowbell Cyber. agent: Thank you. And do you currently have an active Incident Response contract with ProCircular? user: Yes, we do. agent: Perfect. I have all the information I need. Our Incident Response Team will be notified immediately and will contact you shortly at the phone number you're calling from. Is there anything else you'd like to add? user: No, that's all. agent: Okay. Thank you for calling ProCircular. Our team will be in touch very soon. user: Okay. Thank you. agent: You're welcome. Goodbye.",
+  "summary": "The user, Jim Sherlock from Cyberpave, reported a malware incident where all machines, including the payroll system, are locked up and a Bitcoin payment is demanded. He confirmed having Cyber Liability Insurance with Cowbell Cyber and an active IR contract with ProCircular.",
+  "analysis": {
+    "incident_liability_insurance_status": "yes",
+    "caller_name": "Jim Sherlock",
+    "incident_is_customer_primary_contact": "true",
+    "current_customer": "true",
+    "cybersecurity_insurance_provider_name": "Cowbell Cyber",
+    "non_IR_inquiry_reason": "other",
+    "caller_email_address": "jsherlock@cybercade.com",
+    "company_name": "Cyberpave",
+    "caller_phone_number": "3196218396",
+    "IR_call_description": "All of my machines are locked up with malware. It says I need to pay Bitcoin. Everything is locked up internally and external system, including our payroll system."
+  },
+  "metadata": {}
+}
+
