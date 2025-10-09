@@ -424,8 +424,11 @@ export async function RetellWebhookProcessor(request: HttpRequest, context: Invo
 }
 
 // Register the function with Azure Functions runtime
+// Note: Use 'anonymous' for local development, 'function' for production
 app.http('RetellWebhookProcessor', {
     methods: ['POST'],
-    authLevel: 'function',
+    authLevel: process.env.FUNCTIONS_WORKER_RUNTIME === 'node' && !process.env.WEBSITE_INSTANCE_ID
+        ? 'anonymous'  // Local development
+        : 'function',  // Azure production
     handler: RetellWebhookProcessor
 });
