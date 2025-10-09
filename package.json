@@ -1,14 +1,18 @@
 {
   "name": "pc-ir-relay",
   "version": "1.0.0",
-  "description": "",
+  "description": "Azure Function webhook processor for Retell AI with multi-channel notifications",
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
     "clean": "rimraf dist",
     "prestart": "npm run clean && npm run build",
     "start": "func start",
-    "test": "echo \"No tests yet...\""
+    "dev": "npm run clean && npm run build && func start",
+    "test": "echo \"No tests yet...\"",
+    "test:flags": "./test-feature-flags.sh",
+    "deploy": "npm run build && func azure functionapp publish procircular-ir-webhook",
+    "logs": "func azure functionapp logstream procircular-ir-webhook"
   },
   "dependencies": {
     "@azure/functions": "^4.0.0",
@@ -20,5 +24,16 @@
     "rimraf": "^5.0.0",
     "typescript": "^4.0.0"
   },
-  "main": "dist/src/{index.js,functions/*.js}"
+  "main": "dist/src/{index.js,functions/*.js}",
+  "keywords": [
+    "azure-functions",
+    "retell-ai",
+    "webhook",
+    "sendgrid",
+    "twilio",
+    "microsoft-teams",
+    "incident-response"
+  ],
+  "author": "ProCircular",
+  "license": "ISC"
 }
