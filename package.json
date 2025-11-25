@@ -11,12 +11,16 @@
     "dev": "npm run clean && npm run build && func start",
     "test": "echo \"No tests yet...\"",
     "test:flags": "./test-feature-flags.sh",
-    "deploy": "npm run build && func azure functionapp publish procircular-ir-webhook",
-    "logs": "func azure functionapp logstream procircular-ir-webhook"
+    "deploy": "npm run build && func azure functionapp publish pc-retell-webhook",
+    "deploy-v2": "npm run build && func azure functionapp publish pc-retell-webhook-v2",
+    "logs": "func azure functionapp logstream pc-retell-webhook",
+    "logs-v2": "func azure functionapp logstream pc-retell-webhook-v2"
   },
   "dependencies": {
+    "@azure/communication-email": "^1.0.0",
     "@azure/functions": "^4.0.0",
     "@sendgrid/mail": "^8.1.6",
+    "retell-sdk": "^4.53.0",
     "twilio": "^5.10.2"
   },
   "devDependencies": {
@@ -24,7 +28,7 @@
     "rimraf": "^5.0.0",
     "typescript": "^4.0.0"
   },
-  "main": "dist/src/{index.js,functions/*.js}",
+  "main": "dist/src/index.js",
   "keywords": [
     "azure-functions",
     "retell-ai",
