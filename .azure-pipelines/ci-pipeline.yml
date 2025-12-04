@@ -164,4 +164,21 @@ stages:
             displayName: 'Code Quality: ESLint'
             continueOnError: true
 
+          # Validate RetellAI Agent Configurations
+          - script: |
+              if [ -d retell-agents/agents ] && [ "$(ls -A retell-agents/agents/*.json 2>/dev/null)" ]; then
+                echo "Validating RetellAI agent configurations..."
+                for config in retell-agents/agents/*.json; do
+                  if [ -f "$config" ]; then
+                    echo "Validating: $config"
+                    node scripts/retell-validate-config.js "$config" || exit 1
+                  fi
+                done
+                echo "✅ All agent configurations are valid"
+              else
+                echo "No agent configuration files found, skipping validation..."
+              fi
+            displayName: 'Validate RetellAI Agent Configs'
+            continueOnError: false
+
 

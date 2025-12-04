@@ -82,7 +82,12 @@ if git ls-files --error-unmatch "$CONFIG_FILE" >/dev/null 2>&1; then
         # Get all changed lines (lines starting with + or -)
         CHANGED_LINES=$(echo "$DIFF_OUTPUT" | grep -E "^[+-]" | grep -v "^[+-][+-][+-]" || true)
         # Check if all changed lines are only metadata fields
-        NON_METADATA_CHANGES=$(echo "$CHANGED_LINES" | grep -v "last_fetched" | grep -v "fetched_by" | grep -v "^[+-]\s*$" || true)
+        # Use precise JSON key matching (not substring matching) to avoid false positives
+        # Match JSON keys like: "last_fetched":, "fetched_by":, "last_prompt_sync":
+        # This ensures we only filter actual metadata fields, not content containing these strings
+        # Pattern matches: "key": where key is one of the metadata field names
+        METADATA_PATTERN='("last_fetched"|"fetched_by"|"last_prompt_sync")\s*:'
+        NON_METADATA_CHANGES=$(echo "$CHANGED_LINES" | grep -vE "$METADATA_PATTERN" | grep -v "^[+-]\s*$" || true)
         
         if [ -z "$NON_METADATA_CHANGES" ] && [ -n "$CHANGED_LINES" ]; then
             echo "ℹ️  Only metadata timestamp changed (not a meaningful change)"

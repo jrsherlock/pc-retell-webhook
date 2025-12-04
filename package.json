@@ -14,7 +14,15 @@
     "deploy": "npm run build && func azure functionapp publish pc-retell-webhook",
     "deploy-v2": "npm run build && func azure functionapp publish pc-retell-webhook-v2",
     "logs": "func azure functionapp logstream pc-retell-webhook",
-    "logs-v2": "func azure functionapp logstream pc-retell-webhook-v2"
+    "logs-v2": "func azure functionapp logstream pc-retell-webhook-v2",
+    "retell:list-agents": "node scripts/retell-fetch-agent.js --list",
+    "retell:fetch-agent": "node scripts/retell-fetch-agent.js",
+    "retell:deploy-agent": "node scripts/retell-deploy-agent.js",
+    "retell:validate": "node scripts/retell-validate-config.js",
+    "retell:validate-all": "npm run retell:validate -- retell-agents/agents/*.json",
+    "retell:sync-prompt": "bash scripts/sync-prompt-to-config.sh",
+    "retell:sync": "bash scripts/quick-sync-agent.sh",
+    "retell:verify-sync": "bash scripts/verify-sync-status.sh"
   },
   "dependencies": {
     "@azure/communication-email": "^1.0.0",
