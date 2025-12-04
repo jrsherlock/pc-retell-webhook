@@ -15,7 +15,7 @@ trigger:
       - host.json
     exclude:
       - docs/**
-      - *.md
+      - '*.md'
 
 pr:
   branches:
