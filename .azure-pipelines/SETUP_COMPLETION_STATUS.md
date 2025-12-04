@@ -72,18 +72,13 @@ Variable groups need to be linked through the Azure DevOps UI:
    - **pc-ir-relay-prod-vars**
 6. Click **Link** for each
 
-### Verify Service Connection
+### Service Connection
 
-1. Go to: https://dev.azure.com/procircular/dco/_settings/adminservices
-2. Verify service connection: **Azure-ProCircular-Subscription**
-3. If it doesn't exist, create it:
-   - Click **New service connection**
-   - Select **Azure Resource Manager**
-   - Select **Service principal (automatic)**
-   - **Subscription:** `procircular-dev-subscription`
-   - **Resource group:** `pcretellwebhook` (optional)
-   - **Service connection name:** `Azure-ProCircular-Subscription`
-   - Click **Save**
+✅ **Service Connection Configured:**
+- The pipeline now uses the existing service connection: `procircular-dev-subscription(daac0a78-7f06-423c-96a0-14dec5e1ffcd)`
+- This service connection is already set up and authorized
+
+**Alternative:** If you prefer to use a service connection named `Azure-ProCircular-Subscription`, see [FIX_SERVICE_CONNECTION.md](./FIX_SERVICE_CONNECTION.md) for instructions.
 
 ## 🧪 Testing
 
