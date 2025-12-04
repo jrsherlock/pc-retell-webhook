@@ -64,23 +64,13 @@ steps:
       appSettings: |
         [
           {
-            "name": "JIRA_PROJECT_KEY",
-            "value": "$(JIRA_PROJECT_KEY)",
+            "name": "FUNCTIONS_WORKER_RUNTIME",
+            "value": "node",
             "slotSetting": false
           },
           {
-            "name": "JIRA_API_URL",
-            "value": "$(JIRA_API_URL)",
-            "slotSetting": false
-          },
-          {
-            "name": "JIRA_USER_EMAIL",
-            "value": "$(JIRA_USER_EMAIL)",
-            "slotSetting": false
-          },
-          {
-            "name": "JIRA_API_TOKEN",
-            "value": "$(JIRA_API_TOKEN)",
+            "name": "FUNCTIONS_EXTENSION_VERSION",
+            "value": "~4",
             "slotSetting": false
           },
           {
@@ -91,6 +81,16 @@ steps:
           {
             "name": "ENABLE_JIRA_NOTIFICATIONS",
             "value": "$(ENABLE_JIRA_NOTIFICATIONS)",
+            "slotSetting": false
+          },
+          {
+            "name": "ENABLE_TEAMS_NOTIFICATIONS",
+            "value": "$(ENABLE_TEAMS_NOTIFICATIONS)",
+            "slotSetting": false
+          },
+          {
+            "name": "ENABLE_SMS_NOTIFICATIONS",
+            "value": "$(ENABLE_SMS_NOTIFICATIONS)",
             "slotSetting": false
           },
           {
@@ -109,11 +109,6 @@ steps:
             "slotSetting": false
           },
           {
-            "name": "JIRA_FAILURE_NOTIFICATION_RECIPIENTS",
-            "value": "$(JIRA_FAILURE_NOTIFICATION_RECIPIENTS)",
-            "slotSetting": false
-          },
-          {
             "name": "SENDGRID_FROM_EMAIL",
             "value": "$(SENDGRID_FROM_EMAIL)",
             "slotSetting": false
@@ -126,6 +121,41 @@ steps:
           {
             "name": "EMAIL_FROM_NAME_NON_IR",
             "value": "$(EMAIL_FROM_NAME_NON_IR)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_API_URL",
+            "value": "$(JIRA_API_URL)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_PROJECT_KEY",
+            "value": "$(JIRA_PROJECT_KEY)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_USER_EMAIL",
+            "value": "$(JIRA_USER_EMAIL)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_FAILURE_NOTIFICATION_RECIPIENTS",
+            "value": "$(JIRA_FAILURE_NOTIFICATION_RECIPIENTS)",
+            "slotSetting": false
+          },
+          {
+            "name": "TEAMS_WEBHOOK_URL",
+            "value": "$(TEAMS_WEBHOOK_URL)",
+            "slotSetting": false
+          },
+          {
+            "name": "TWILIO_FROM_NUMBER",
+            "value": "$(TWILIO_FROM_NUMBER)",
+            "slotSetting": false
+          },
+          {
+            "name": "ONCALL_PHONE_NUMBER",
+            "value": "$(ONCALL_PHONE_NUMBER)",
             "slotSetting": false
           }
         ]
@@ -154,11 +184,6 @@ steps:
             "slotSetting": false
           },
           {
-            "name": "JIRA_USER_EMAIL",
-            "value": "$(JIRA-USER-EMAIL)",
-            "slotSetting": false
-          },
-          {
             "name": "TWILIO_ACCOUNT_SID",
             "value": "$(TWILIO-ACCOUNT-SID)",
             "slotSetting": false
@@ -171,6 +196,11 @@ steps:
           {
             "name": "AZURE_COMMUNICATION_CONNECTION_STRING",
             "value": "$(AZURE-COMMUNICATION-CONNECTION-STRING)",
+            "slotSetting": false
+          },
+          {
+            "name": "AZURE_COMMUNICATION_SENDER_EMAIL",
+            "value": "$(AZURE-COMMUNICATION-SENDER-EMAIL)",
             "slotSetting": false
           }
         ]
