@@ -1,0 +1,17 @@
+# Ignore backup files created by scripts
+*.backup
+*.bak
+*.old
+
+# Ignore temporary files
+*.tmp
+*.temp
+
+# Ignore local overrides (if any)
+local-*.json
+*.local.json
+
+# Keep all agent config files in version control
+!agents/*.json
+!templates/*.json
+

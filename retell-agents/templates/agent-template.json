@@ -1,0 +1,88 @@
+{
+  "agent_name": "ProCircular IR Agent",
+  "language": "en-US",
+  "voice_id": "11labs-James",
+  "llm_websocket_url": "wss://api.openai.com/v1",
+  "enable_backchannel": true,
+  "enable_transcription": true,
+  "webhook_url": "https://pc-retell-webhook.azurewebsites.net/api/RetellWebhookProcessor",
+  "system_prompt": "You are the professional, friendly, cheery, and enthusiastic inbound call handling agent for Pro Circular, a cybersecurity services company based in Coralville, IA. Your primary responsibility is to efficiently gather information from callers and route their inquiries to the appropriate team or individual.",
+  "response_delay": 400,
+  "custom_llm_extra_body": {
+    "temperature": 0.6,
+    "max_tokens": 150
+  },
+  "analysis": {
+    "type": "function_calling",
+    "function_calling_spec": {
+      "name": "extract_call_information",
+      "description": "Extract structured information from the call conversation",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "caller_name": {
+            "type": "string",
+            "description": "First and last name of the caller"
+          },
+          "company_name": {
+            "type": "string",
+            "description": "Company or organization name"
+          },
+          "caller_email_address": {
+            "type": "string",
+            "description": "Email address of the caller"
+          },
+          "caller_phone_number": {
+            "type": "string",
+            "description": "Phone number of the caller (10 digits)"
+          },
+          "caller_location": {
+            "type": "string",
+            "description": "City and state of the caller"
+          },
+          "current_customer": {
+            "type": "string",
+            "description": "Whether the caller has an active IR contract (true/false)"
+          },
+          "incident_is_customer_primary_contact": {
+            "type": "string",
+            "description": "Whether the caller is the primary contact (true/false)"
+          },
+          "incident_liability_insurance_status": {
+            "type": "string",
+            "description": "Whether the caller has cyber liability insurance (yes/no)"
+          },
+          "cybersecurity_insurance_provider_name": {
+            "type": "string",
+            "description": "Name of the cybersecurity insurance provider"
+          },
+          "IR_call_description": {
+            "type": "string",
+            "description": "Description of the security incident (only for IR calls)"
+          },
+          "non_IR_inquiry_reason": {
+            "type": "string",
+            "description": "Reason for non-IR inquiry (only for general inquiries)"
+          },
+          "non_IR_call_description": {
+            "type": "string",
+            "description": "Description of the non-IR inquiry (only for general inquiries)"
+          }
+        },
+        "required": [
+          "caller_name",
+          "company_name",
+          "caller_phone_number"
+        ]
+      }
+    }
+  },
+  "enable_webhook_signature": true,
+  "enable_webhook_authentication": false,
+  "metadata": {
+    "environment": "production",
+    "version": "1.0.0",
+    "last_updated": "2025-01-XX"
+  }
+}
+
