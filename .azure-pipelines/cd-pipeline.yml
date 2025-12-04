@@ -1,0 +1,84 @@
+# CD Pipeline for ProCircular IR Relay Function App
+# Deploys to DEV, STG, and PROD environments
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: pc-ir-relay-common-vars
+  - name: azureSubscription
+    value: 'Azure-ProCircular-Subscription'
+  - name: functionAppName
+    value: 'pc-retell-webhook'
+
+stages:
+  - stage: DeployDev
+    displayName: 'Deploy to Development'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+    variables:
+      - group: pc-ir-relay-dev-vars
+    jobs:
+      - deployment: DeployFunctionAppDev
+        displayName: 'Deploy Function App to DEV'
+        environment: 'Development'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-function-app.yml
+                  parameters:
+                    azureSubscription: $(azureSubscription)
+                    functionAppName: 'pc-retell-webhook-dev'
+                    resourceGroup: 'pcretellwebhook'
+                    variableGroup: 'pc-ir-relay-dev-vars'
+                    keyVaultName: 'pc-ir-relay-kv'
+
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: pc-ir-relay-stg-vars
+    jobs:
+      - deployment: DeployFunctionAppStg
+        displayName: 'Deploy Function App to STG'
+        environment: 'Staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-function-app.yml
+                  parameters:
+                    azureSubscription: $(azureSubscription)
+                    functionAppName: 'pc-retell-webhook-stg'
+                    resourceGroup: 'pcretellwebhook'
+                    variableGroup: 'pc-ir-relay-stg-vars'
+                    keyVaultName: 'pc-ir-relay-kv'
+
+  - stage: DeployProduction
+    displayName: 'Deploy to Production'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: pc-ir-relay-prod-vars
+    jobs:
+      - deployment: DeployFunctionAppProd
+        displayName: 'Deploy Function App to PROD'
+        environment: 'Production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: templates/deploy-function-app.yml
+                  parameters:
+                    azureSubscription: $(azureSubscription)
+                    functionAppName: 'pc-retell-webhook'
+                    resourceGroup: 'pcretellwebhook'
+                    variableGroup: 'pc-ir-relay-prod-vars'
+                    keyVaultName: 'pc-ir-relay-kv'
+
+

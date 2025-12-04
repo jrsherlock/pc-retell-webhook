@@ -1,16 +1,24 @@
 # ProCircular IR Relay - Retell AI Webhook Processor
 
-An Azure Function that processes Retell AI `call_analyzed` webhook events and automatically sends multi-channel notifications for cybersecurity incident reports.
+An Azure Function that processes Retell AI `call_analyzed` webhook events and intelligently routes notifications based on call type (IR vs Non-IR).
 
 ## 🎯 Overview
 
-This serverless application receives webhook notifications from Retell AI when a cybersecurity incident call is analyzed. It then automatically:
+This serverless application receives webhook notifications from Retell AI when calls are analyzed. It intelligently determines the call type and routes notifications accordingly:
 
-1. **📧 Sends a formatted email** to the Incident Response Team via SendGrid
-2. **💬 Posts a rich notification card** to a Microsoft Teams channel
-3. **📱 Sends an SMS alert** to the on-call phone number via Twilio
+### **IR (Incident Response) Calls**
+When a cybersecurity incident is reported:
+1. **🎫 Creates a Jira ticket** automatically via webhook integration
+2. **📧 Sends IR alert email** to the Incident Response Team
+3. **💬 Posts notification card** to Microsoft Teams channel
+4. **📱 Sends SMS alert** to on-call phone number
 
-All three notifications are triggered in parallel for maximum efficiency.
+### **Non-IR (General Inquiry) Calls**
+When a general question or service inquiry is received:
+1. **📧 Sends email summary** to designated recipient (Brandon/Katie)
+2. **No Jira ticket, Teams, or SMS** - keeps IR channels clear
+
+All notifications are triggered in parallel for maximum efficiency.
 
 ## 🏗️ Architecture
 
@@ -31,14 +39,31 @@ SendGrid   Teams    Twilio
 
 ## 🚀 Features
 
+- **Intelligent Call Routing** - Automatically detects IR vs Non-IR calls and routes appropriately
+- **Jira Integration** - Creates incident tickets automatically via webhook
+- **Enhanced Data Capture** - Includes caller location (City, State) and security incident flag
+- **Dual Email Providers** - Supports both SendGrid and Azure Communication Services
 - **TypeScript V4 Programming Model** - Modern Azure Functions development
 - **Feature Flags** - Granular control over notification channels via environment variables
 - **Parallel Execution** - All notifications sent simultaneously using `Promise.all()`
 - **Type Safety** - Full TypeScript interfaces for payload validation
 - **Rich Formatting** - HTML emails and Adaptive Cards for Teams
+- **Separate Non-IR Workflow** - Dedicated email summaries for general inquiries
 - **Error Handling** - Comprehensive try-catch with detailed logging
 - **Secure Configuration** - All secrets managed via environment variables
 - **Production Ready** - Follows Azure Functions best practices
+
+### 🎯 Production Deployment Configuration
+
+**Currently Enabled for Production:**
+- ✅ Jira Integration (automatic ticket creation for IR calls)
+- ✅ Email Notifications (IR alerts to IRT@procircular.com, Non-IR summaries to jsherlock@procircular.com)
+
+**Deferred to Future Phase (can be enabled via feature flags):**
+- ⏸️ Microsoft Teams Notifications (set `ENABLE_TEAMS_NOTIFICATIONS=true` to enable)
+- ⏸️ SMS Notifications (set `ENABLE_SMS_NOTIFICATIONS=true` to enable)
+
+All notification channels are fully implemented and tested - they're simply disabled via feature flags for the initial production deployment.
 
 ## 📋 Prerequisites
 
@@ -75,11 +100,22 @@ Required environment variables:
 - `ENABLE_EMAIL_NOTIFICATIONS` - Set to "true" to enable email (default: false)
 - `ENABLE_TEAMS_NOTIFICATIONS` - Set to "true" to enable Teams (default: false)
 - `ENABLE_SMS_NOTIFICATIONS` - Set to "true" to enable SMS (default: false)
+- `ENABLE_JIRA_NOTIFICATIONS` - Set to "true" to enable Jira ticket creation (default: false)
 
-**Service Credentials** (only required for enabled channels):
-- `SENDGRID_API_KEY` - Your SendGrid API key
-- `SENDGRID_FROM_EMAIL` - Verified sender email
-- `IRT_EMAIL_ADDRESS` - Incident Response Team email
+**Email Configuration:**
+- `EMAIL_PROVIDER` - Choose "sendgrid" or "azure" (default: sendgrid)
+- `SENDGRID_API_KEY` - Your SendGrid API key (if using SendGrid)
+- `SENDGRID_FROM_EMAIL` - Verified sender email (if using SendGrid)
+- `AZURE_COMMUNICATION_CONNECTION_STRING` - Azure Communication Services connection string (if using Azure)
+- `AZURE_COMMUNICATION_SENDER_EMAIL` - Azure sender email (if using Azure)
+- `IRT_EMAIL_ADDRESS` - Incident Response Team email (for IR alerts)
+- `NON_IR_EMAIL_RECIPIENT` - Email recipient for non-IR summaries (defaults to IRT_EMAIL_ADDRESS)
+
+**Jira Integration:**
+- `JIRA_WEBHOOK_URL` - Jira incoming webhook URL (required if Jira enabled)
+- `JIRA_PROJECT_KEY` - Jira project key, e.g., "IRT" (optional, defaults to "IRT")
+
+**Teams & SMS:**
 - `TEAMS_WEBHOOK_URL` - Microsoft Teams incoming webhook URL
 - `TWILIO_ACCOUNT_SID` - Twilio account SID
 - `TWILIO_AUTH_TOKEN` - Twilio auth token
@@ -165,12 +201,15 @@ interface RetellAnalysisPayload {
     company_name?: string;
     caller_phone_number?: string;
     caller_email_address?: string;
+    caller_location?: string;  // NEW: City, State format (e.g., "Minneapolis, Minnesota")
     current_customer?: string;
     incident_is_customer_primary_contact?: string;
     incident_liability_insurance_status?: string;
     cybersecurity_insurance_provider_name?: string;
+    is_security_incident?: boolean;  // NEW: Boolean flag indicating if this is a security incident
     IR_call_description?: string;
     non_IR_inquiry_reason?: string;
+    non_IR_call_description?: string;
   };
   metadata?: Record<string, any>;
 }

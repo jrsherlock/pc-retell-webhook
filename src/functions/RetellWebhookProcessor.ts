@@ -96,12 +96,16 @@ interface ServiceConfig {
     emailProvider: 'sendgrid' | 'azure';  // Email provider selection
     sendgrid: {
         apiKey: string;
-        fromEmail: string;
+        fromEmail: string;  // Default/fallback FROM email
+        fromEmailIr: string;  // FROM email for IR emails
+        fromEmailNonIr: string;  // FROM email for non-IR emails
         toEmail: string;
     };
     azureEmail: {
         connectionString: string;
-        senderEmail: string;
+        senderEmail: string;  // Default/fallback sender email
+        senderEmailIr: string;  // Sender email for IR emails
+        senderEmailNonIr: string;  // Sender email for non-IR emails
         recipientEmail: string;
     };
     teams: {
@@ -118,9 +122,19 @@ interface ServiceConfig {
         userEmail: string;
         apiToken: string;
         projectKey: string;
+        requestTypeDev: string;  // Request Type ID for dev environment (e.g., "250")
+        requestTypeProd: string;  // Request Type ID for production (e.g., "151")
+        issueType: string;  // JIRA issue type (e.g., "[System] Incident")
+        toEmail: string;  // Email address for "TO:" field in JIRA ticket description
+        failureNotificationRecipients: string;  // Email recipients for JIRA failure notifications (comma-separated)
     };
     nonIrEmail: {
         recipientEmail: string;
+    };
+    email: {
+        fromNameIr: string;  // FROM name for IR emails (e.g., "ProCircular Incident Response")
+        fromNameNonIr: string;  // FROM name for non-IR emails (e.g., "Procircular General Inquiry")
+        unsubscribeEmail: string;  // Unsubscribe email address for List-Unsubscribe header
     };
     featureFlags: {
         enableEmail: boolean;
@@ -179,12 +193,16 @@ function loadConfiguration(): ServiceConfig {
         emailProvider,
         sendgrid: {
             apiKey: process.env.SENDGRID_API_KEY || '',
-            fromEmail: process.env.SENDGRID_FROM_EMAIL || '',
+            fromEmail: process.env.SENDGRID_FROM_EMAIL || 'DONOTREPLY@procircular.com',  // Default/fallback
+            fromEmailIr: process.env.SENDGRID_FROM_EMAIL_IR || process.env.SENDGRID_FROM_EMAIL || 'DONOTREPLY@procircular.com',
+            fromEmailNonIr: process.env.SENDGRID_FROM_EMAIL_NON_IR || process.env.SENDGRID_FROM_EMAIL || 'DONOTREPLY@procircular.com',
             toEmail: process.env.IRT_EMAIL_ADDRESS || ''
         },
         azureEmail: {
             connectionString: process.env.AZURE_COMMUNICATION_CONNECTION_STRING || '',
-            senderEmail: process.env.AZURE_COMMUNICATION_SENDER_EMAIL || '',
+            senderEmail: process.env.AZURE_COMMUNICATION_SENDER_EMAIL || 'DONOTREPLY@procircular.com',  // Default/fallback
+            senderEmailIr: process.env.AZURE_COMMUNICATION_SENDER_EMAIL_IR || process.env.AZURE_COMMUNICATION_SENDER_EMAIL || 'DONOTREPLY@procircular.com',
+            senderEmailNonIr: process.env.AZURE_COMMUNICATION_SENDER_EMAIL_NON_IR || process.env.AZURE_COMMUNICATION_SENDER_EMAIL || 'DONOTREPLY@procircular.com',
             recipientEmail: process.env.IRT_EMAIL_ADDRESS || ''
         },
         teams: {
@@ -200,10 +218,20 @@ function loadConfiguration(): ServiceConfig {
             apiUrl: process.env.JIRA_API_URL || '',
             userEmail: process.env.JIRA_USER_EMAIL || '',
             apiToken: process.env.JIRA_API_TOKEN || '',
-            projectKey: process.env.JIRA_PROJECT_KEY || 'IRT'
+            projectKey: process.env.JIRA_PROJECT_KEY || 'IRT',
+            requestTypeDev: process.env.JIRA_REQUEST_TYPE_DEV || '250',  // Default: DEV - Report a Cybersecurity Incident
+            requestTypeProd: process.env.JIRA_REQUEST_TYPE_PROD || '151',  // Default: IR Email Report
+            issueType: process.env.JIRA_ISSUE_TYPE || '[System] Incident',
+            toEmail: process.env.JIRA_TO_EMAIL || process.env.IRT_EMAIL_ADDRESS || 'IRT@procircular.com',
+            failureNotificationRecipients: process.env.JIRA_FAILURE_NOTIFICATION_RECIPIENTS || 'csirt@procircular.com,jsherlock@procircular.com'  // Default recipients for JIRA failure alerts
         },
         nonIrEmail: {
             recipientEmail: process.env.NON_IR_EMAIL_RECIPIENT || process.env.IRT_EMAIL_ADDRESS || ''
+        },
+        email: {
+            fromNameIr: process.env.EMAIL_FROM_NAME_IR || 'ProCircular Incident Response',
+            fromNameNonIr: process.env.EMAIL_FROM_NAME_NON_IR || 'Procircular General Inquiry',
+            unsubscribeEmail: process.env.UNSUBSCRIBE_EMAIL || 'unsubscribe@procircular.com'
         },
         featureFlags: {
             enableEmail,
@@ -563,6 +591,17 @@ async function sendEmailViaAzure(payload: RetellAnalysisPayload, config: Service
     context.log(`  Sender: ${config.azureEmail.senderEmail}`);
     context.log(`  Recipient: ${config.azureEmail.recipientEmail}`);
 
+    // Validate minimum required data for IR calls (safety check - main validation already done)
+    const validation = validateIrCallData(payload);
+    if (!validation.valid) {
+        context.log('❌ IR email skipped - missing required data:');
+        validation.missingFields.forEach(field => context.log(`   - ${field}`));
+        context.log('⚠️  Email will NOT be sent.');
+        return; // Return early without throwing
+    }
+
+    context.log('✅ Minimum required data validated for IR email');
+
     // Initialize Azure Email Client
     const emailClient = new EmailClient(config.azureEmail.connectionString);
 
@@ -576,19 +615,24 @@ async function sendEmailViaAzure(payload: RetellAnalysisPayload, config: Service
 
     // Build email message with Azure Communication Services format
     const message = {
-        senderAddress: config.azureEmail.senderEmail,
+        senderAddress: config.azureEmail.senderEmailIr,  // Sender email for IR (from AZURE_COMMUNICATION_SENDER_EMAIL_IR or AZURE_COMMUNICATION_SENDER_EMAIL)
         content: {
             subject: `[INCIDENT] ${companyName} - Cybersecurity Alert`,
             plainText: plainTextBody,
             html: htmlBody
         },
         recipients: {
-            to: [
-                {
-                    address: config.azureEmail.recipientEmail,
-                    displayName: "Incident Response Team"
-                }
-            ]
+            to: (() => {
+                // Support multiple recipients (comma-separated)
+                const emails = config.azureEmail.recipientEmail.includes(',')
+                    ? config.azureEmail.recipientEmail.split(',').map(email => email.trim())
+                    : [config.azureEmail.recipientEmail];
+                
+                return emails.map(email => ({
+                    address: email.trim(),
+                    displayName: email === 'IRT@procircular.com' ? "Incident Response Team" : "Monitoring"
+                }));
+            })()
         },
         headers: {
             // Custom headers for better deliverability
@@ -597,7 +641,7 @@ async function sendEmailViaAzure(payload: RetellAnalysisPayload, config: Service
             "X-MSMail-Priority": "High",  // Microsoft Mail priority
             "X-Mailer": "ProCircular IR System",  // Identify sender
             "X-Entity-Ref-ID": payload.call_id,  // Unique reference
-            "List-Unsubscribe": "<mailto:unsubscribe@procircular.com>"  // Required for corporate filters
+            "List-Unsubscribe": `<mailto:${config.email.unsubscribeEmail}>`  // Required for corporate filters
         },
         userEngagementTrackingDisabled: true  // Disable tracking for corporate compatibility
     };
@@ -637,6 +681,17 @@ async function sendEmailViaSendGrid(payload: RetellAnalysisPayload, config: Serv
     context.log(`  Sender: ${config.sendgrid.fromEmail}`);
     context.log(`  Recipient: ${config.sendgrid.toEmail}`);
 
+    // Validate minimum required data for IR calls (safety check - main validation already done)
+    const validation = validateIrCallData(payload);
+    if (!validation.valid) {
+        context.log('❌ IR email skipped - missing required data:');
+        validation.missingFields.forEach(field => context.log(`   - ${field}`));
+        context.log('⚠️  Email will NOT be sent.');
+        return; // Return early without throwing
+    }
+
+    context.log('✅ Minimum required data validated for IR email');
+
     sgMail.setApiKey(config.sendgrid.apiKey);
 
     // Support both old format (analysis) and new format (call_analysis.custom_analysis_data)
@@ -648,13 +703,18 @@ async function sendEmailViaSendGrid(payload: RetellAnalysisPayload, config: Serv
     const plainTextBody = buildPlainTextEmail(payload);
 
     // Enhanced SendGrid message configuration for corporate email deliverability
+    // Support multiple recipients (comma-separated or array)
+    const recipients = config.sendgrid.toEmail.includes(',') 
+        ? config.sendgrid.toEmail.split(',').map(email => email.trim())
+        : config.sendgrid.toEmail;
+    
     const msg = {
-        to: config.sendgrid.toEmail,
+        to: recipients,
         from: {
-            email: config.sendgrid.fromEmail,
-            name: 'ProCircular Incident Response'  // Friendly sender name
+            email: config.sendgrid.fromEmailIr,  // FROM email for IR (from SENDGRID_FROM_EMAIL_IR or SENDGRID_FROM_EMAIL)
+            name: config.email.fromNameIr  // Friendly sender name (from EMAIL_FROM_NAME_IR env var)
         },
-        replyTo: config.sendgrid.fromEmail,  // Enable replies
+        replyTo: config.sendgrid.fromEmailIr,  // Reply-to uses same as FROM
         subject: `[INCIDENT] ${companyName} - Cybersecurity Alert`,  // Clear, professional subject
         text: plainTextBody,  // Plain text version (for Outlook and other clients that strip HTML)
         html: htmlBody,       // HTML version (for clients that support it)
@@ -669,7 +729,7 @@ async function sendEmailViaSendGrid(payload: RetellAnalysisPayload, config: Serv
             'X-MSMail-Priority': 'High',  // Microsoft Mail priority
             'X-Mailer': 'ProCircular IR System',  // Identify the sending application
             'X-Entity-Ref-ID': payload.call_id,  // Unique reference for tracking
-            'List-Unsubscribe': '<mailto:unsubscribe@procircular.com>',  // Required for corporate filters
+            'List-Unsubscribe': `<mailto:${config.email.unsubscribeEmail}>`,  // Required for corporate filters
             'Precedence': 'bulk',  // Indicate this is automated but important
         },
 
@@ -887,6 +947,359 @@ function getYesNo(value: any): string {
 }
 
 /**
+ * Validate that IR call has minimum required data
+ * Required: confirmed incident, caller name, company, phone number
+ */
+function validateIrCallData(payload: RetellAnalysisPayload): { valid: boolean; missingFields: string[] } {
+    const analysis = payload.analysis || payload.call_analysis?.custom_analysis_data || {};
+    const missingFields: string[] = [];
+
+    // Check for confirmed security incident
+    if (analysis.is_security_incident !== true) {
+        missingFields.push('confirmed security incident (is_security_incident must be true)');
+    }
+
+    // Check for caller name (first and last name)
+    const callerName = analysis.caller_name;
+    if (!callerName || String(callerName).trim() === '' || String(callerName).trim().toLowerCase() === 'not provided') {
+        missingFields.push('caller first and last name');
+    }
+
+    // Check for company name
+    const companyName = analysis.company_name;
+    if (!companyName || String(companyName).trim() === '' || String(companyName).trim().toLowerCase() === 'not provided') {
+        missingFields.push('company name');
+    }
+
+    // Check for phone number
+    const phoneNumber = analysis.caller_phone_number;
+    if (!phoneNumber || String(phoneNumber).trim() === '' || String(phoneNumber).trim().toLowerCase() === 'not provided') {
+        missingFields.push('phone number');
+    }
+
+    return {
+        valid: missingFields.length === 0,
+        missingFields
+    };
+}
+
+/**
+ * Validate that non-IR call has minimum required data
+ * Required: confirmed NOT a security incident, caller name, and either phone number OR email
+ * Note: company_name is optional for non-IR calls as it may not always be relevant
+ */
+function validateNonIrCallData(payload: RetellAnalysisPayload): { valid: boolean; missingFields: string[] } {
+    const analysis = payload.analysis || payload.call_analysis?.custom_analysis_data || {};
+    const missingFields: string[] = [];
+
+    // Check that call is NOT a security incident (must be explicitly false or not true)
+    if (analysis.is_security_incident === true) {
+        missingFields.push('call must not be a security incident (is_security_incident must be false or not set)');
+    }
+
+    // Check for caller name
+    const callerName = analysis.caller_name;
+    if (!callerName || String(callerName).trim() === '' || String(callerName).trim().toLowerCase() === 'not provided') {
+        missingFields.push('caller name');
+    }
+
+    // Note: company_name is NOT required for non-IR calls as it may not always be relevant
+    // (e.g., someone calling to verify an address may not be associated with a company)
+
+    // Check for contact information (phone OR email - at least one required)
+    const phoneNumber = analysis.caller_phone_number;
+    const emailAddress = analysis.caller_email_address;
+    
+    const hasPhone = phoneNumber && String(phoneNumber).trim() !== '' && String(phoneNumber).trim().toLowerCase() !== 'not provided';
+    const hasEmail = emailAddress && String(emailAddress).trim() !== '' && String(emailAddress).trim().toLowerCase() !== 'not provided';
+    
+    if (!hasPhone && !hasEmail) {
+        missingFields.push('contact information (phone number OR email address)');
+    }
+
+    return {
+        valid: missingFields.length === 0,
+        missingFields
+    };
+}
+
+/**
+ * Convert plain text to Atlassian Document Format (ADF) for JIRA API v3
+ * JIRA API v3 requires descriptions in ADF format, not plain text
+ */
+function convertTextToAtlassianDocumentFormat(text: string): any {
+    // Split text by newlines and create paragraphs
+    const lines = text.split('\n').filter(line => line.trim() !== '');
+    
+    if (lines.length === 0) {
+        // Return empty paragraph if no content
+        return {
+            type: 'doc',
+            version: 1,
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        {
+                            type: 'text',
+                            text: 'No description provided'
+                        }
+                    ]
+                }
+            ]
+        };
+    }
+    
+    // Convert each line to a paragraph
+    const content = lines.map(line => ({
+        type: 'paragraph',
+        content: [
+            {
+                type: 'text',
+                text: line.trim()
+            }
+        ]
+    }));
+    
+    return {
+        type: 'doc',
+        version: 1,
+        content: content
+    };
+}
+
+/**
+ * Send email notification when JIRA ticket creation fails
+ */
+async function sendJiraFailureNotificationEmail(
+    payload: RetellAnalysisPayload,
+    error: Error,
+    config: ServiceConfig,
+    context: InvocationContext
+): Promise<void> {
+    context.log('📧 Sending JIRA failure notification email...');
+
+    const analysis = payload.analysis || payload.call_analysis?.custom_analysis_data || {};
+    const companyName = getString(analysis.company_name, 'Unknown Company');
+    const callerName = getString(analysis.caller_name, 'Unknown Caller');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Build HTML email body
+    const htmlBody = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background-color: #d32f2f; color: white; padding: 20px; text-align: center; }
+                .content { background-color: #f5f5f5; padding: 20px; margin-top: 20px; }
+                .error-box { background-color: #ffebee; border-left: 4px solid #d32f2f; padding: 15px; margin: 20px 0; }
+                .field { margin-bottom: 15px; }
+                .label { font-weight: bold; color: #555; }
+                .value { margin-top: 5px; }
+                .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #777; }
+                pre { background-color: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>⚠️ JIRA Ticket Creation Failed</h1>
+                </div>
+                <div class="content">
+                    <div class="error-box">
+                        <strong>⚠️ ALERT:</strong> A call_analyzed event was received but the system was unable to create a JIRA ticket.
+                    </div>
+                    <div class="field">
+                        <div class="label">Call ID:</div>
+                        <div class="value">${payload.call_id}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">Company Name:</div>
+                        <div class="value">${companyName}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">Caller Name:</div>
+                        <div class="value">${callerName}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">Caller Phone:</div>
+                        <div class="value">${getString(analysis.caller_phone_number, 'N/A')}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">Caller Email:</div>
+                        <div class="value">${getString(analysis.caller_email_address, 'N/A')}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">JIRA Project:</div>
+                        <div class="value">${config.jira.projectKey}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">JIRA User:</div>
+                        <div class="value">${config.jira.userEmail}</div>
+                    </div>
+                    <div class="error-box">
+                        <div class="label">Error Message:</div>
+                        <pre>${errorMessage}</pre>
+                    </div>
+                    <div class="field">
+                        <div class="label">Timestamp:</div>
+                        <div class="value">${new Date().toLocaleString()}</div>
+                    </div>
+                    ${payload.recording_url || payload.public_log_url ? `
+                    <div class="field">
+                        <div class="label">Call Resources:</div>
+                        <div class="value">
+                            ${payload.recording_url ? `<a href="${payload.recording_url}" target="_blank">Recording</a> | ` : ''}
+                            ${payload.public_log_url ? `<a href="${payload.public_log_url}" target="_blank">Public Log</a>` : ''}
+                        </div>
+                    </div>
+                    ` : ''}
+                    <div class="footer">
+                        <p><strong>Action Required:</strong> Please manually create a JIRA ticket for this incident or investigate the error.</p>
+                        <p>This is an automated notification from the ProCircular Incident Response System.</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+
+    // Build plain text email body
+    const plainTextBody = `
+╔════════════════════════════════════════════════════════════════╗
+║          ⚠️  JIRA TICKET CREATION FAILED                       ║
+╚════════════════════════════════════════════════════════════════╝
+
+ALERT: A call_analyzed event was received but the system was unable to create a JIRA ticket.
+
+CALL INFORMATION
+─────────────────────────────────────────────────────────────────
+Call ID:        ${payload.call_id}
+Company Name:   ${companyName}
+Caller Name:    ${callerName}
+Caller Phone:   ${getString(analysis.caller_phone_number, 'N/A')}
+Caller Email:   ${getString(analysis.caller_email_address, 'N/A')}
+
+JIRA CONFIGURATION
+─────────────────────────────────────────────────────────────────
+JIRA Project:  ${config.jira.projectKey}
+JIRA User:     ${config.jira.userEmail}
+JIRA API URL:  ${config.jira.apiUrl}
+
+ERROR DETAILS
+─────────────────────────────────────────────────────────────────
+${errorMessage}
+
+TIMESTAMP
+─────────────────────────────────────────────────────────────────
+${new Date().toLocaleString()}
+
+${payload.recording_url ? `Call Recording: ${payload.recording_url}\n` : ''}
+${payload.public_log_url ? `Public Log: ${payload.public_log_url}\n` : ''}
+
+─────────────────────────────────────────────────────────────────
+ACTION REQUIRED: Please manually create a JIRA ticket for this incident
+or investigate the error.
+
+This is an automated notification from the ProCircular Incident
+Response System.
+─────────────────────────────────────────────────────────────────
+    `;
+
+    // Support multiple recipients (comma-separated) - use JIRA failure notification recipients
+    const recipients = config.jira.failureNotificationRecipients.includes(',')
+        ? config.jira.failureNotificationRecipients.split(',').map(email => email.trim())
+        : [config.jira.failureNotificationRecipients];
+
+    if (config.emailProvider === 'azure') {
+        // Send via Azure Communication Services
+        const emailClient = new EmailClient(config.azureEmail.connectionString);
+
+        const message = {
+            senderAddress: config.azureEmail.senderEmailIr,
+            content: {
+                subject: `[ALERT] JIRA Ticket Creation Failed - ${companyName}`,
+                plainText: plainTextBody,
+                html: htmlBody
+            },
+            recipients: {
+                to: recipients.map(email => ({
+                    address: email.trim(),
+                    displayName: email === 'IRT@procircular.com' ? "Incident Response Team" : "Monitoring"
+                }))
+            },
+            headers: {
+                "X-Priority": "1",
+                "Importance": "high",
+                "X-MSMail-Priority": "High",
+                "X-Mailer": "ProCircular IR System",
+                "X-Entity-Ref-ID": payload.call_id,
+                "List-Unsubscribe": `<mailto:${config.email.unsubscribeEmail}>`
+            },
+            userEngagementTrackingDisabled: true
+        };
+
+        try {
+            const poller = await emailClient.beginSend(message);
+            const result = await poller.pollUntilDone();
+
+            if (result.status === KnownEmailSendStatus.Succeeded) {
+                context.log(`✅ JIRA failure notification email sent successfully via Azure Communication Services`);
+            } else {
+                context.error(`❌ Failed to send JIRA failure notification email: ${result.status}`);
+            }
+        } catch (emailError) {
+            context.error(`❌ Exception sending JIRA failure notification email: ${emailError instanceof Error ? emailError.message : String(emailError)}`);
+            // Don't throw - we don't want email failures to mask the original JIRA error
+        }
+    } else {
+        // Send via SendGrid
+        try {
+            sgMail.setApiKey(config.sendgrid.apiKey);
+
+            const msg = {
+                to: recipients,
+                from: {
+                    email: config.sendgrid.fromEmailIr,
+                    name: config.email.fromNameIr
+                },
+                replyTo: config.sendgrid.fromEmailIr,
+                subject: `[ALERT] JIRA Ticket Creation Failed - ${companyName}`,
+                text: plainTextBody,
+                html: htmlBody,
+                categories: ['jira-failure', 'system-alert', 'automated'],
+                headers: {
+                    'X-Priority': '1',
+                    'Importance': 'high',
+                    'X-MSMail-Priority': 'High',
+                    'X-Mailer': 'ProCircular IR System',
+                    'X-Entity-Ref-ID': payload.call_id,
+                    'List-Unsubscribe': `<mailto:${config.email.unsubscribeEmail}>`
+                },
+                trackingSettings: {
+                    clickTracking: { enable: false, enableText: false },
+                    openTracking: { enable: false },
+                    subscriptionTracking: { enable: false }
+                },
+                customArgs: {
+                    call_id: payload.call_id,
+                    company: companyName,
+                    notification_type: 'jira_failure_alert'
+                }
+            };
+
+            await sgMail.send(msg);
+            context.log('✅ JIRA failure notification email sent successfully via SendGrid');
+        } catch (emailError) {
+            context.error(`❌ Exception sending JIRA failure notification email: ${emailError instanceof Error ? emailError.message : String(emailError)}`);
+            // Don't throw - we don't want email failures to mask the original JIRA error
+        }
+    }
+}
+
+/**
  * Create Jira ticket via REST API (replaces webhook integration)
  */
 async function createJiraTicketViaApi(
@@ -895,6 +1308,17 @@ async function createJiraTicketViaApi(
     context: InvocationContext
 ): Promise<void> {
     context.log('📤 Creating Jira ticket via REST API...');
+
+    // Validate minimum required data for IR calls (safety check - main validation already done)
+    const validation = validateIrCallData(payload);
+    if (!validation.valid) {
+        context.log('❌ JIRA ticket creation skipped - missing required data:');
+        validation.missingFields.forEach(field => context.log(`   - ${field}`));
+        context.log('⚠️  JIRA ticket will NOT be created.');
+        return; // Return early without throwing
+    }
+
+    context.log('✅ Minimum required data validated for JIRA ticket creation');
 
     const analysis = payload.analysis || payload.call_analysis?.custom_analysis_data || {};
 
@@ -907,42 +1331,41 @@ async function createJiraTicketViaApi(
     const dateStr = `${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getDate().toString().padStart(2, '0')}/${now.getFullYear().toString().slice(-2)}`;
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toLowerCase();
 
-    // Build plain-text description matching VoiceNation email format exactly
-    const plainTextDescription = `TO: IRT@procircular.com
-SENT: ${dateStr} ${timeStr}
-SUBJECT: AUTOMATED MAIL DELIVERY
-FOR: Support
-
-Security Incident (Y/N): ${analysis.is_security_incident === true ? 'Yes' : 'No'}
-Caller's First and Last Name: ${getString(analysis.caller_name)}
-Primary Contact (Y/N): ${getYesNo(analysis.incident_is_customer_primary_contact)}
-Company Name: ${getString(analysis.company_name)}
-Email Address: ${getString(analysis.caller_email_address)}
-Phone Number: ${getString(analysis.caller_phone_number)}
-City, State: ${getString(analysis.caller_location)}
-Cyber Liability Insurance (Y/N): ${getYesNo(analysis.incident_liability_insurance_status)}
-Provider Name: ${getString(analysis.cybersecurity_insurance_provider_name)}
-Active IR Contract (Y/N): ${getYesNo(analysis.current_customer)}
-Brief Description of Issue: ${getString(analysis.IR_call_description, 'No description provided')}`;
+    // Build description with only the "Brief Description of Issue" text
+    const briefDescription = getString(analysis.IR_call_description, 'No description provided');
 
     // Build Jira API payload with proper field structure
+    // JIRA API v3 requires description in Atlassian Document Format (ADF)
     const jiraPayload = {
         fields: {
             project: {
                 key: config.jira.projectKey
             },
             issuetype: {
-                name: "[System] Incident"
+                name: config.jira.issueType
             },
             summary: `${getString(analysis.company_name, 'Unknown Company')} - Incident ${dateStr}`,
 
-            // Plain-text description matching VoiceNation format for JIRA automation
-            description: plainTextDescription
+            // Note: Request Type (customfield_10010) is NOT set explicitly - JIRA automation will handle it
+
+            // Set custom fields explicitly
+            customfield_10106: getString(analysis.company_name),  // Company
+            customfield_10113: getString(analysis.caller_location),  // Location (City/State)
+            customfield_10109: getString(analysis.caller_name),  // FirstLastName
+            customfield_10110: getString(analysis.caller_email_address),  // Email Address
+            customfield_10111: getString(analysis.caller_phone_number),  // Phone Number
+            customfield_10107: { value: getYesNo(analysis.incident_liability_insurance_status) },  // CyberInsurance (radio button)
+            customfield_10108: { value: getYesNo(analysis.current_customer) },  // ActiveIRContract (radio button)
+
+            // Description field contains only the "Brief Description of Issue" text
+            description: convertTextToAtlassianDocumentFormat(briefDescription)
         }
     };
 
     context.log(`📤 Sending Jira API request to: ${endpoint}`);
     context.log(`📋 Ticket summary: ${jiraPayload.fields.summary}`);
+
+    let emailNotificationSent = false;
 
     try {
         const response = await fetch(endpoint, {
@@ -958,7 +1381,20 @@ Brief Description of Issue: ${getString(analysis.IR_call_description, 'No descri
         if (!response.ok) {
             const errorText = await response.text();
             context.error(`❌ Jira API request failed with status ${response.status}: ${errorText}`);
-            throw new Error(`Jira API request failed: ${response.status} - ${errorText}`);
+            const error = new Error(`Jira API request failed: ${response.status} - ${errorText}`);
+            
+            // Send failure notification email (only if email is enabled)
+            if (config.featureFlags.enableEmail) {
+                try {
+                    await sendJiraFailureNotificationEmail(payload, error, config, context);
+                    emailNotificationSent = true;
+                } catch (emailError) {
+                    context.error(`❌ Failed to send JIRA failure notification email: ${emailError instanceof Error ? emailError.message : String(emailError)}`);
+                    // Continue to throw the original JIRA error
+                }
+            }
+            
+            throw error;
         }
 
         const responseData: any = await response.json();
@@ -970,6 +1406,17 @@ Brief Description of Issue: ${getString(analysis.IR_call_description, 'No descri
 
     } catch (error) {
         context.error(`❌ Error creating Jira ticket: ${error instanceof Error ? error.message : String(error)}`);
+        
+        // Send failure notification email (only if email is enabled and we haven't already sent it)
+        if (config.featureFlags.enableEmail && !emailNotificationSent) {
+            try {
+                await sendJiraFailureNotificationEmail(payload, error instanceof Error ? error : new Error(String(error)), config, context);
+            } catch (emailError) {
+                context.error(`❌ Failed to send JIRA failure notification email: ${emailError instanceof Error ? emailError.message : String(emailError)}`);
+                // Continue to throw the original JIRA error
+            }
+        }
+        
         throw error;
     }
 }
@@ -1229,6 +1676,17 @@ async function sendNonIrEmail(payload: RetellAnalysisPayload, config: ServiceCon
     context.log(`  Provider: ${config.emailProvider}`);
     context.log(`  Recipient: ${config.nonIrEmail.recipientEmail}`);
 
+    // Validate minimum required data for non-IR calls (safety check - main validation already done)
+    const validation = validateNonIrCallData(payload);
+    if (!validation.valid) {
+        context.log('❌ Non-IR email skipped - missing required data:');
+        validation.missingFields.forEach(field => context.log(`   - ${field}`));
+        context.log('⚠️  Email will NOT be sent.');
+        return; // Return early without throwing
+    }
+
+    context.log('✅ Minimum required data validated for non-IR email');
+
     const analysis = payload.analysis || payload.call_analysis?.custom_analysis_data || {};
     const companyName = analysis.company_name || 'Unknown Company';
 
@@ -1236,24 +1694,29 @@ async function sendNonIrEmail(payload: RetellAnalysisPayload, config: ServiceCon
     const htmlBody = buildNonIrHtmlEmailBody(payload);
     const plainTextBody = buildNonIrPlainTextEmail(payload);
 
+    // Support multiple recipients (comma-separated)
+    const recipients = config.nonIrEmail.recipientEmail.includes(',')
+        ? config.nonIrEmail.recipientEmail.split(',').map(email => email.trim())
+        : [config.nonIrEmail.recipientEmail];
+
+    context.log(`  Sending to ${recipients.length} recipient(s): ${recipients.join(', ')}`);
+
     if (config.emailProvider === 'azure') {
         // Send via Azure Communication Services
         const emailClient = new EmailClient(config.azureEmail.connectionString);
 
         const message = {
-            senderAddress: config.azureEmail.senderEmail,
+            senderAddress: config.azureEmail.senderEmailNonIr,  // Sender email for non-IR (from AZURE_COMMUNICATION_SENDER_EMAIL_NON_IR or AZURE_COMMUNICATION_SENDER_EMAIL)
             content: {
                 subject: `[NON-IR] General Inquiry - ${companyName}`,
                 plainText: plainTextBody,
                 html: htmlBody
             },
             recipients: {
-                to: [
-                    {
-                        address: config.nonIrEmail.recipientEmail,
-                        displayName: "ProCircular Team"
-                    }
-                ]
+                to: recipients.map(email => ({
+                    address: email.trim(),
+                    displayName: email.includes('kwahlstrom') ? "ProCircular Team" : "Monitoring"
+                }))
             },
             userEngagementTrackingDisabled: true
         };
@@ -1262,7 +1725,7 @@ async function sendNonIrEmail(payload: RetellAnalysisPayload, config: ServiceCon
         const result = await poller.pollUntilDone();
 
         if (result.status === KnownEmailSendStatus.Succeeded) {
-            context.log(`✅ Non-IR email sent successfully via Azure Communication Services`);
+            context.log(`✅ Non-IR email sent successfully via Azure Communication Services to ${recipients.length} recipient(s)`);
         } else {
             throw new Error(`Azure email send failed: ${result.status}`);
         }
@@ -1271,12 +1734,12 @@ async function sendNonIrEmail(payload: RetellAnalysisPayload, config: ServiceCon
         sgMail.setApiKey(config.sendgrid.apiKey);
 
         const msg = {
-            to: config.nonIrEmail.recipientEmail,
+            to: recipients,
             from: {
-                email: config.sendgrid.fromEmail,
-                name: 'ProCircular Incident Response'
+                email: config.sendgrid.fromEmailNonIr,  // FROM email for non-IR (from SENDGRID_FROM_EMAIL_NON_IR or SENDGRID_FROM_EMAIL)
+                name: config.email.fromNameNonIr  // FROM name (from EMAIL_FROM_NAME_NON_IR env var)
             },
-            replyTo: config.sendgrid.fromEmail,
+            replyTo: config.sendgrid.fromEmailNonIr,  // Reply-to uses same as FROM
             subject: `[NON-IR] General Inquiry - ${companyName}`,
             text: plainTextBody,
             html: htmlBody,
@@ -1300,7 +1763,7 @@ async function sendNonIrEmail(payload: RetellAnalysisPayload, config: ServiceCon
 
 /**
  * Main Azure Function handler for Retell AI webhook
- * Build Version: 2025-10-27-15:25:56 (MD5: 22306599a638a2dae3cf90f587a22e0a)
+ * Build Version: 2025-01-XX (Production Ready - Request Type Support)
  */
 export async function RetellWebhookProcessor(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     context.log('Retell AI webhook received');
@@ -1424,16 +1887,42 @@ export async function RetellWebhookProcessor(request: HttpRequest, context: Invo
             callType = 'IR';
             context.log('🚨 Processing as IR (Incident Response) call');
 
+            // Validate minimum required data before processing
+            const irValidation = validateIrCallData(payload);
+            if (!irValidation.valid) {
+                context.log('❌ IR call processing ABORTED - missing required data:');
+                irValidation.missingFields.forEach(field => context.log(`   - ${field}`));
+                context.log('⚠️  No JIRA ticket will be created. No email will be sent.');
+                
+                return {
+                    status: 200,
+                    jsonBody: {
+                        success: false,
+                        message: 'IR call processing skipped - missing required data',
+                        missingFields: irValidation.missingFields,
+                        call_id: payload.call_id
+                    }
+                };
+            }
+
+            context.log('✅ IR call validation passed - minimum required data present');
+
             // Add Jira ticket creation for IR calls
             if (config.featureFlags.enableJira) {
                 context.log('Adding Jira ticket creation to queue...');
-                notificationTasks.push(createJiraTicketViaApi(payload, config, context));
+                notificationTasks.push(createJiraTicketViaApi(payload, config, context).catch(error => {
+                    context.error(`JIRA ticket creation failed: ${error.message}`);
+                    throw error;
+                }));
             }
 
             // Add IR alert email
             if (config.featureFlags.enableEmail) {
                 context.log('Adding IR alert email to queue...');
-                notificationTasks.push(sendEmail(payload, config, context));
+                notificationTasks.push(sendEmail(payload, config, context).catch(error => {
+                    context.error(`IR email send failed: ${error.message}`);
+                    throw error;
+                }));
             }
 
             // Add Teams notification
@@ -1453,9 +1942,32 @@ export async function RetellWebhookProcessor(request: HttpRequest, context: Invo
             callType = 'NON-IR';
             context.log('📞 Processing as Non-IR (General Inquiry) call');
 
+            // Validate minimum required data before processing
+            const nonIrValidation = validateNonIrCallData(payload);
+            if (!nonIrValidation.valid) {
+                context.log('❌ Non-IR call processing ABORTED - missing required data:');
+                nonIrValidation.missingFields.forEach(field => context.log(`   - ${field}`));
+                context.log('⚠️  No email will be sent.');
+                
+                return {
+                    status: 200,
+                    jsonBody: {
+                        success: false,
+                        message: 'Non-IR call processing skipped - missing required data',
+                        missingFields: nonIrValidation.missingFields,
+                        call_id: payload.call_id
+                    }
+                };
+            }
+
+            context.log('✅ Non-IR call validation passed - minimum required data present');
+
             // Only send non-IR email summary (no Jira, Teams, or SMS)
             context.log('Adding non-IR email summary to queue...');
-            notificationTasks.push(sendNonIrEmail(payload, config, context));
+            notificationTasks.push(sendNonIrEmail(payload, config, context).catch(error => {
+                context.error(`Non-IR email send failed: ${error.message}`);
+                throw error;
+            }));
 
         } else {
             // UNCLASSIFIED CALL - Default to IR workflow for safety
