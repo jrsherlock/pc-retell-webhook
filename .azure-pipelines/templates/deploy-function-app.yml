@@ -1,0 +1,191 @@
+# Reusable template for deploying Azure Function App
+# Parameters:
+#   azureSubscription: Service connection name
+#   functionAppName: Name of the Function App
+#   resourceGroup: Azure resource group name
+#   variableGroup: Variable group name for environment variables
+#   keyVaultName: Azure Key Vault name for secrets
+
+parameters:
+  - name: azureSubscription
+    type: string
+  - name: functionAppName
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: variableGroup
+    type: string
+  - name: keyVaultName
+    type: string
+
+steps:
+  - task: NodeTool@0
+    displayName: 'Install Node.js'
+    inputs:
+      versionSpec: '20.x'
+
+  - task: AzureKeyVault@2
+    displayName: 'Retrieve secrets from Key Vault'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      KeyVaultName: ${{ parameters.keyVaultName }}
+      SecretsFilter: '*'
+      RunAsPreJob: true
+
+  - script: |
+      npm ci
+      npm run build
+    displayName: 'Build Function App'
+
+  - task: ArchiveFiles@2
+    displayName: 'Archive Function App'
+    inputs:
+      rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+      includeRootFolder: false
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/function-app.zip'
+      replaceExistingArchive: true
+
+  - task: AzureFunctionApp@1
+    displayName: 'Deploy Function App'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      appType: 'functionApp'
+      appName: ${{ parameters.functionAppName }}
+      package: '$(Build.ArtifactStagingDirectory)/function-app.zip'
+      deploymentMethod: 'zipDeploy'
+
+  - task: AzureAppServiceSettings@1
+    displayName: 'Update App Settings from Variable Group'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      appName: ${{ parameters.functionAppName }}
+      resourceGroupName: ${{ parameters.resourceGroup }}
+      appSettings: |
+        [
+          {
+            "name": "JIRA_PROJECT_KEY",
+            "value": "$(JIRA_PROJECT_KEY)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_API_URL",
+            "value": "$(JIRA_API_URL)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_USER_EMAIL",
+            "value": "$(JIRA_USER_EMAIL)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_API_TOKEN",
+            "value": "$(JIRA_API_TOKEN)",
+            "slotSetting": false
+          },
+          {
+            "name": "ENABLE_EMAIL_NOTIFICATIONS",
+            "value": "$(ENABLE_EMAIL_NOTIFICATIONS)",
+            "slotSetting": false
+          },
+          {
+            "name": "ENABLE_JIRA_NOTIFICATIONS",
+            "value": "$(ENABLE_JIRA_NOTIFICATIONS)",
+            "slotSetting": false
+          },
+          {
+            "name": "EMAIL_PROVIDER",
+            "value": "$(EMAIL_PROVIDER)",
+            "slotSetting": false
+          },
+          {
+            "name": "IRT_EMAIL_ADDRESS",
+            "value": "$(IRT_EMAIL_ADDRESS)",
+            "slotSetting": false
+          },
+          {
+            "name": "NON_IR_EMAIL_RECIPIENT",
+            "value": "$(NON_IR_EMAIL_RECIPIENT)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_FAILURE_NOTIFICATION_RECIPIENTS",
+            "value": "$(JIRA_FAILURE_NOTIFICATION_RECIPIENTS)",
+            "slotSetting": false
+          },
+          {
+            "name": "SENDGRID_FROM_EMAIL",
+            "value": "$(SENDGRID_FROM_EMAIL)",
+            "slotSetting": false
+          },
+          {
+            "name": "EMAIL_FROM_NAME_IR",
+            "value": "$(EMAIL_FROM_NAME_IR)",
+            "slotSetting": false
+          },
+          {
+            "name": "EMAIL_FROM_NAME_NON_IR",
+            "value": "$(EMAIL_FROM_NAME_NON_IR)",
+            "slotSetting": false
+          }
+        ]
+
+  - task: AzureAppServiceSettings@1
+    displayName: 'Update App Settings from Key Vault Secrets'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      appName: ${{ parameters.functionAppName }}
+      resourceGroupName: ${{ parameters.resourceGroup }}
+      appSettings: |
+        [
+          {
+            "name": "RETELL_API_KEY",
+            "value": "$(RETELL-API-KEY)",
+            "slotSetting": false
+          },
+          {
+            "name": "SENDGRID_API_KEY",
+            "value": "$(SENDGRID-API-KEY)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_API_TOKEN",
+            "value": "$(JIRA-API-TOKEN)",
+            "slotSetting": false
+          },
+          {
+            "name": "JIRA_USER_EMAIL",
+            "value": "$(JIRA-USER-EMAIL)",
+            "slotSetting": false
+          },
+          {
+            "name": "TWILIO_ACCOUNT_SID",
+            "value": "$(TWILIO-ACCOUNT-SID)",
+            "slotSetting": false
+          },
+          {
+            "name": "TWILIO_AUTH_TOKEN",
+            "value": "$(TWILIO-AUTH-TOKEN)",
+            "slotSetting": false
+          },
+          {
+            "name": "AZURE_COMMUNICATION_CONNECTION_STRING",
+            "value": "$(AZURE-COMMUNICATION-CONNECTION-STRING)",
+            "slotSetting": false
+          }
+        ]
+
+  - task: AzureAppServiceManage@0
+    displayName: 'Restart Function App'
+    inputs:
+      azureSubscription: ${{ parameters.azureSubscription }}
+      Action: 'Restart Azure App Service'
+      WebAppName: ${{ parameters.functionAppName }}
+      ResourceGroupName: ${{ parameters.resourceGroup }}
+
+  - script: |
+      echo "##vso[task.setvariable variable=deploymentStatus]Success"
+      echo "Function App deployed successfully: ${{ parameters.functionAppName }}"
+    displayName: 'Set deployment status'
+
+

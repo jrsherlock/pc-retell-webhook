@@ -1,0 +1,167 @@
+# CI Pipeline for ProCircular IR Relay Function App
+# Triggers on PRs and commits to main/develop branches
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - src/**
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - host.json
+    exclude:
+      - docs/**
+      - *.md
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: pc-ir-relay-common-vars
+  - name: nodeVersion
+    value: '20.x'
+  - name: buildConfiguration
+    value: 'Release'
+
+stages:
+  - stage: Build
+    displayName: 'Build and Test'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build Function App'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Install Node.js $(nodeVersion)'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+
+          - task: Cache@2
+            displayName: 'Cache node_modules'
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: 'node_modules'
+
+          - script: |
+              npm ci
+            displayName: 'Install dependencies'
+
+          - script: |
+              npm run build
+            displayName: 'Build TypeScript'
+
+          - script: |
+              npm audit --audit-level=high
+            displayName: 'Security: npm audit'
+            continueOnError: true
+
+          - task: PublishTestResults@2
+            condition: always()
+            displayName: 'Publish test results'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/test-results.xml'
+              failTaskOnFailedTests: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish build artifacts'
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)'
+              artifactName: 'function-app'
+              publishLocation: 'Container'
+
+  - stage: SecurityScan
+    displayName: 'Security Scanning'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: SecurityJob
+        displayName: 'Run Security Scans'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+
+          - script: |
+              npm ci
+            displayName: 'Install dependencies'
+
+          # ESLint Security Plugin
+          - script: |
+              npm install --save-dev eslint-plugin-security
+              npx eslint src/ --ext .ts --format json --output-file eslint-report.json || true
+            displayName: 'Security: ESLint Security Scan'
+            continueOnError: true
+
+          # Dependency Vulnerability Scan
+          - script: |
+              npm audit --json > npm-audit-report.json || true
+            displayName: 'Security: Dependency Vulnerability Scan'
+            continueOnError: true
+
+          # Publish Security Reports
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish security reports'
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)'
+              artifactName: 'security-reports'
+              publishLocation: 'Container'
+
+          # Fail build on critical vulnerabilities
+          - script: |
+              if [ -f npm-audit-report.json ]; then
+                CRITICAL=$(cat npm-audit-report.json | jq '.metadata.vulnerabilities.critical // 0')
+                HIGH=$(cat npm-audit-report.json | jq '.metadata.vulnerabilities.high // 0')
+                if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 5 ]; then
+                  echo "##vso[task.logissue type=error]Critical or high vulnerabilities detected!"
+                  exit 1
+                fi
+              fi
+            displayName: 'Security: Check for critical vulnerabilities'
+            continueOnError: false
+
+  - stage: CodeQuality
+    displayName: 'Code Quality'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: QualityJob
+        displayName: 'Code Quality Checks'
+        steps:
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: '$(nodeVersion)'
+
+          - script: |
+              npm ci
+            displayName: 'Install dependencies'
+
+          # TypeScript Compilation Check
+          - script: |
+              npm run build
+            displayName: 'TypeScript: Compilation Check'
+
+          # Linting (if ESLint is configured)
+          - script: |
+              if [ -f .eslintrc.json ] || [ -f .eslintrc.js ]; then
+                npx eslint src/ --ext .ts || true
+              else
+                echo "ESLint not configured, skipping..."
+              fi
+            displayName: 'Code Quality: ESLint'
+            continueOnError: true
+
+
