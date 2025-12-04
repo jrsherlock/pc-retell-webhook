@@ -9,13 +9,13 @@ This serverless application receives webhook notifications from Retell AI when c
 ### **IR (Incident Response) Calls**
 When a cybersecurity incident is reported:
 1. **🎫 Creates a Jira ticket** automatically via webhook integration
-2. **📧 Sends IR alert email** to the Incident Response Team
-3. **💬 Posts notification card** to Microsoft Teams channel
-4. **📱 Sends SMS alert** to on-call phone number
+2. **📧 Sends IR alert email** (Configurable)
+3. **💬 Posts notification card** to Microsoft Teams channel (Optional)
+4. **📱 Sends SMS alert** to on-call phone number (Optional)
 
 ### **Non-IR (General Inquiry) Calls**
 When a general question or service inquiry is received:
-1. **📧 Sends email summary** to designated recipient (Brandon/Katie)
+1. **📧 Sends email summary** to designated recipient (Katie W)
 2. **No Jira ticket, Teams, or SMS** - keeps IR channels clear
 
 All notifications are triggered in parallel for maximum efficiency.
