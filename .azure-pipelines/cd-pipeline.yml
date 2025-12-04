@@ -13,7 +13,7 @@ pool:
 variables:
   - group: pc-ir-relay-common-vars
   - name: azureSubscription
-    value: 'Azure-ProCircular-Subscription'
+    value: 'procircular-dev-subscription(daac0a78-7f06-423c-96a0-14dec5e1ffcd)'
   - name: functionAppName
     value: 'pc-retell-webhook'
 
