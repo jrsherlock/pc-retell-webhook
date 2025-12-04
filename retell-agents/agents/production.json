@@ -1,0 +1,11 @@
+{
+  "agent_id": "agent_d1811032b0e5282793a991fe6b",
+  "agent_name": "Inbound ProCircular IR Triage",
+  "language": "en-US",
+  "voice_id": "11labs-Emily",
+  "webhook_url": "https://pc-retell-webhook.azurewebsites.net/api/retellwebhookprocessor",
+  "metadata": {
+    "last_fetched": "2025-12-04T18:58:41.472Z",
+    "fetched_by": "sherlock"
+  }
+}
